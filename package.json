@@ -12,5 +12,15 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.2.1"
-  }
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rrealmrezarajabi/UserManagement-backend.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rrealmrezarajabi/UserManagement-backend/issues"
+  },
+  "homepage": "https://github.com/rrealmrezarajabi/UserManagement-backend#readme"
 }

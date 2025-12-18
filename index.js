@@ -1,9 +1,9 @@
-const express = require('express');
-const cors = require('cors');
+const express = require("express");
+const cors = require("cors");
 
 const app = express();
 
-// 👇 برای اینکه بتونیم از فرانت به بک‌اند درخواست بزنیم
+// 👇 اجازه اتصال فرانت
 app.use(cors());
 app.use(express.json());
 
@@ -11,63 +11,42 @@ app.use(express.json());
 //  ادمین ثابت برای لاگین
 // =======================
 const ADMIN = {
-  email: 'admin@example.com',
-  password: '123456',
-  name: 'Admin',
+  email: "admin@example.com",
+  password: "123456",
+  name: "Admin",
 };
 
-const ADMIN_TOKEN = 'my_super_secret_admin_token';
+const ADMIN_TOKEN = "my_super_secret_admin_token";
 
 // =======================
-//   دیتای فیک کاربران
+//   ساخت دیتای فیک کاربران
 // =======================
 
-let users = [
-  {
-    id: 1,
-    name: 'Ali Rezaei',
-    email: 'ali@example.com',
-    phone: '+98 912 111 2233',
-    avatar: 'https://i.pravatar.cc/150?img=1',
-    role: 'USER',
-    isActive: true,
-    createdAt: '2025-01-20T12:30:00Z',
-    updatedAt: '2025-01-22T10:15:00Z',
-    lastLogin: '2025-01-21T08:00:00Z',
-  },
-  {
-    id: 2,
-    name: 'Sara Mohammadi',
-    email: 'sara@example.com',
-    phone: '+98 935 222 8899',
-    avatar: 'https://i.pravatar.cc/150?img=5',
-    role: 'ADMIN',
-    isActive: true,
-    createdAt: '2025-01-10T09:00:00Z',
-    updatedAt: '2025-01-18T11:00:00Z',
-    lastLogin: '2025-01-19T07:45:00Z',
-  },
-  {
-    id: 3,
-    name: 'Reza Karimi',
-    email: 'reza@example.com',
-    phone: '+98 901 554 7788',
-    avatar: 'https://i.pravatar.cc/150?img=12',
-    role: 'USER',
-    isActive: false,
-    createdAt: '2025-01-05T15:30:00Z',
-    updatedAt: '2025-01-15T14:00:00Z',
-    lastLogin: '2025-01-12T09:22:00Z',
-  },
-];
+const TOTAL_USERS = 150; // 👈 تعداد یوزرها (برای تست pagination)
+
+let users = Array.from({ length: TOTAL_USERS }, (_, i) => {
+  const id = i + 1;
+
+  return {
+    id,
+    name: `User ${id}`,
+    email: `user${id}@example.com`,
+    phone: `+98 9${Math.floor(100000000 + Math.random() * 900000000)}`,
+    avatar: `https://i.pravatar.cc/150?img=${(id % 70) + 1}`,
+    role: id % 10 === 0 ? "ADMIN" : "USER",
+    isActive: id % 5 !== 0,
+    createdAt: new Date(Date.now() - id * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastLogin: id % 3 === 0 ? new Date().toISOString() : null,
+  };
+});
 
 // =======================
 //       Auth API
 // =======================
 
 // POST /api/auth/login
-// بدنه درخواست: { email, password }
-app.post('/api/auth/login', (req, res) => {
+app.post("/api/auth/login", (req, res) => {
   const { email, password } = req.body;
 
   if (email === ADMIN.email && password === ADMIN.password) {
@@ -75,29 +54,27 @@ app.post('/api/auth/login', (req, res) => {
       user: {
         name: ADMIN.name,
         email: ADMIN.email,
-        role: 'ADMIN',
+        role: "ADMIN",
       },
-      token: ADMIN_TOKEN, // 👈 اینو تو فرانت تو localStorage نگه می‌داری
+      token: ADMIN_TOKEN,
     });
   }
 
-  return res.status(401).json({ message: 'ایمیل یا پسورد اشتباه است' });
+  return res.status(401).json({ message: "ایمیل یا پسورد اشتباه است" });
 });
 
 // GET /api/auth/me
-// هدر: Authorization: Bearer <token>
-app.get('/api/auth/me', (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.split(' ')[1];
+app.get("/api/auth/me", (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
 
   if (token !== ADMIN_TOKEN) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
-  return res.json({
+  res.json({
     name: ADMIN.name,
     email: ADMIN.email,
-    role: 'ADMIN',
+    role: "ADMIN",
   });
 });
 
@@ -106,13 +83,10 @@ app.get('/api/auth/me', (req, res) => {
 // =======================
 
 function authRequired(req, res, next) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.split(' ')[1];
-
+  const token = req.headers.authorization?.split(" ")[1];
   if (token !== ADMIN_TOKEN) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ message: "Unauthorized" });
   }
-
   next();
 }
 
@@ -120,28 +94,59 @@ function authRequired(req, res, next) {
 //       Users API
 // =======================
 
-// GET /api/users
-// گرفتن لیست همه کاربران (فقط وقتی لاگین کردی)
-app.get('/api/users', authRequired, (req, res) => {
-  res.json(users);
+// GET /api/users?page=1&limit=10&q=ali
+app.get("/api/users", authRequired, (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 10));
+  const q = (req.query.q || "").toLowerCase().trim();
+
+  const filteredUsers = q
+    ? users.filter((u) =>
+        `${u.name} ${u.email} ${u.phone}`.toLowerCase().includes(q)
+      )
+    : users;
+
+  const total = filteredUsers.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(page, totalPages);
+
+  const start = (safePage - 1) * limit;
+  const data = filteredUsers.slice(start, start + limit);
+
+  res.json({
+    data,
+    meta: {
+      page: safePage,
+      limit,
+      total,
+      totalPages,
+      hasNext: safePage < totalPages,
+      hasPrev: safePage > 1,
+    },
+  });
 });
 
 // GET /api/users/:id
-// گرفتن یک کاربر بر اساس id
-app.get('/api/users/:id', authRequired, (req, res) => {
+app.get("/api/users/:id", authRequired, (req, res) => {
   const id = Number(req.params.id);
   const user = users.find((u) => u.id === id);
-  if (!user) return res.status(404).json({ message: 'User not found' });
+  if (!user) return res.status(404).json({ message: "User not found" });
   res.json(user);
 });
 
 // POST /api/users
-// ساختن کاربر جدید
-app.post('/api/users', authRequired, (req, res) => {
-  const { name, email, phone, avatar, role = 'USER', isActive = true } = req.body;
+app.post("/api/users", authRequired, (req, res) => {
+  const {
+    name,
+    email,
+    phone,
+    avatar,
+    role = "USER",
+    isActive = true,
+  } = req.body;
 
   if (!name || !email) {
-    return res.status(400).json({ message: 'Name and email are required' });
+    return res.status(400).json({ message: "Name and email are required" });
   }
 
   const now = new Date().toISOString();
@@ -150,10 +155,10 @@ app.post('/api/users', authRequired, (req, res) => {
     id: users.length ? users[users.length - 1].id + 1 : 1,
     name,
     email,
-    phone: phone || '',
+    phone: phone || "",
     avatar:
       avatar ||
-      'https://i.pravatar.cc/150?u=' + encodeURIComponent(email || name),
+      "https://i.pravatar.cc/150?u=" + encodeURIComponent(email || name),
     role,
     isActive,
     createdAt: now,
@@ -166,44 +171,29 @@ app.post('/api/users', authRequired, (req, res) => {
 });
 
 // PUT /api/users/:id
-// ویرایش کاربر
-app.put('/api/users/:id', authRequired, (req, res) => {
+app.put("/api/users/:id", authRequired, (req, res) => {
   const id = Number(req.params.id);
-  const { name, email, phone, avatar, role, isActive, lastLogin } = req.body;
-
   const idx = users.findIndex((u) => u.id === id);
-  if (idx === -1) return res.status(404).json({ message: 'User not found' });
-
-  const now = new Date().toISOString();
+  if (idx === -1) return res.status(404).json({ message: "User not found" });
 
   users[idx] = {
     ...users[idx],
-    name: name ?? users[idx].name,
-    email: email ?? users[idx].email,
-    phone: phone ?? users[idx].phone,
-    avatar: avatar ?? users[idx].avatar,
-    role: role ?? users[idx].role,
-    isActive: typeof isActive === 'boolean' ? isActive : users[idx].isActive,
-    lastLogin: lastLogin ?? users[idx].lastLogin,
-    updatedAt: now,
+    ...req.body,
+    updatedAt: new Date().toISOString(),
   };
 
   res.json(users[idx]);
 });
 
 // DELETE /api/users/:id
-// حذف کاربر
-app.delete('/api/users/:id', authRequired, (req, res) => {
+app.delete("/api/users/:id", authRequired, (req, res) => {
   const id = Number(req.params.id);
-  const exists = users.some((u) => u.id === id);
-  if (!exists) return res.status(404).json({ message: 'User not found' });
-
   users = users.filter((u) => u.id !== id);
   res.status(204).send();
 });
 
 // =======================
-//     Start the server
+//     Start Server
 // =======================
 
 const PORT = 4000;
